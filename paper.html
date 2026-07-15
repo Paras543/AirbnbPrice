@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fare Prediction — Modeling Airbnb Prices Across NYC</title>
+<style>
+
+  /* ===== Tokens ===== */
+  :root{
+    --navy:#0a1929;
+    --navy-soft:#132840;
+    --cream:#f3efe4;
+    --card:#fbf9f3;
+    --ink:#0f1720;
+    --muted:#5c6570;
+    --line-blue:#0039a6;   /* A C E */
+    --line-green:#00933c;  /* 4 5 6 */
+    --line-orange:#ff6319; /* B D F M */
+    --line-yellow:#fccc0a; /* N Q R W */
+    --line-grey:#a7a9ac;   /* L */
+    --line-red:#ee352e;    /* 1 2 3 */
+    --rule:#d8d0bd;
+    --mono: "SF Mono","Courier New",monospace;
+    --disp: "Helvetica Neue", Arial, sans-serif;
+    --body: -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+
+  body{
+    margin:0;
+    background:var(--cream);
+    color:var(--ink);
+    font-family:var(--body);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  a{color:inherit;}
+
+  /* ===== Top bar ===== */
+  .topbar{
+    position:sticky; top:0; z-index:50;
+    background:var(--navy);
+    color:#fff;
+    border-bottom:4px solid var(--line-yellow);
+  }
+  .topbar-inner{
+    max-width:1120px; margin:0 auto;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 24px;
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--disp); font-weight:800; letter-spacing:0.02em;
+    font-size:15px; text-transform:uppercase;
+  }
+  .brand .bullet{
+    width:28px; height:28px; border-radius:50%;
+    background:var(--line-yellow); color:var(--navy);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:900; font-family:var(--disp); font-size:14px;
+  }
+  nav.stops{
+    display:flex; gap:18px;
+    font-size:11.5px; text-transform:uppercase; letter-spacing:0.08em;
+    font-family:var(--disp); font-weight:700;
+  }
+  nav.stops a{
+    text-decoration:none; color:#c9d3dc;
+    padding-bottom:3px; border-bottom:2px solid transparent;
+    transition:color .15s, border-color .15s;
+    white-space:nowrap;
+  }
+  nav.stops a:hover{ color:#fff; border-color:var(--line-yellow); }
+  @media (max-width:860px){ nav.stops{display:none;} }
+
+  /* ===== Hero ===== */
+  .hero{
+    background:
+      radial-gradient(circle at 15% 20%, rgba(255,99,25,0.14), transparent 45%),
+      radial-gradient(circle at 85% 0%, rgba(0,147,60,0.14), transparent 40%),
+      var(--navy);
+    color:#fff;
+    padding:76px 24px 46px;
+  }
+  .hero-inner{ max-width:1120px; margin:0 auto; text-align:center; }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--mono); font-size:12px; letter-spacing:0.14em;
+    text-transform:uppercase; color:var(--line-yellow);
+    margin-bottom:22px;
+  }
+  .eyebrow::before{
+    content:""; width:9px; height:9px; border-radius:50%;
+    background:var(--line-yellow); display:inline-block;
+  }
+  h1.headline{
+    font-family:var(--disp);
+    font-weight:800;
+    font-size:clamp(34px, 6vw, 60px);
+    line-height:1.04;
+    letter-spacing:-0.01em;
+    margin:0 auto 22px;
+    max-width:15ch;
+  }
+  h1.headline em{
+    font-style:normal; color:var(--line-yellow);
+  }
+  .hero-sub{
+    max-width:60ch; font-size:17px; line-height:1.65; color:#cfd8e0;
+    margin:0 auto 34px;
+  }
+  .hero-meta{
+    display:flex; gap:28px; flex-wrap:wrap; justify-content:center;
+    font-family:var(--mono); font-size:12.5px; color:#9fb0bf;
+  }
+  .hero-meta b{color:#fff; display:block; font-size:15px; font-family:var(--disp);}
+
+  /* ===== Route diagram (signature element) ===== */
+  .route{
+    background:var(--navy-soft);
+    padding:26px 24px 30px;
+    overflow-x:auto;
+    border-bottom:1px solid rgba(255,255,255,0.08);
+  }
+  .route-inner{
+    max-width:1120px; margin:0 auto;
+    display:flex; align-items:flex-start; min-width:820px;
+    position:relative;
+  }
+  .route-line{
+    position:absolute; top:13px; left:0; right:0; height:4px;
+    background:linear-gradient(90deg,
+      var(--line-red), var(--line-orange), var(--line-yellow),
+      var(--line-green), var(--line-blue), var(--line-grey));
+    z-index:0;
+  }
+  .stop{
+    position:relative; z-index:1; flex:1;
+    display:flex; flex-direction:column; align-items:center;
+    text-decoration:none; padding-top:0; gap:10px;
+  }
+  .stop .dot{
+    width:30px; height:30px; border-radius:50%;
+    background:var(--navy); border:4px solid #fff;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--disp); font-weight:800; font-size:12px; color:#fff;
+  }
+  .stop:nth-child(2) .dot{border-color:var(--line-red);}
+  .stop:nth-child(3) .dot{border-color:var(--line-orange);}
+  .stop:nth-child(4) .dot{border-color:var(--line-yellow);}
+  .stop:nth-child(5) .dot{border-color:var(--line-green);}
+  .stop:nth-child(6) .dot{border-color:var(--line-blue);}
+  .stop:nth-child(7) .dot{border-color:var(--line-grey);}
+  .stop .label{
+    font-family:var(--disp); font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:0.04em;
+    color:#c9d3dc; text-align:center; max-width:11ch;
+    transition:color .15s;
+  }
+  .stop:hover .label{ color:#fff; }
+
+  /* ===== Sections ===== */
+  main{ max-width:1120px; margin:0 auto; padding:0 24px; }
+
+  section.stop-section{
+    padding:64px 0 8px;
+    scroll-margin-top:76px;
+    border-bottom:1px solid var(--rule);
+  }
+  section.stop-section:last-of-type{ border-bottom:none; }
+
+  .stop-head{
+    display:flex; align-items:center; gap:14px;
+    margin-bottom:26px;
+  }
+  .stop-num{
+    width:44px; height:44px; border-radius:50%;
+    flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--disp); font-weight:800; font-size:16px; color:#fff;
+  }
+  #data .stop-num{background:var(--line-red);}
+  #eda .stop-num{background:var(--line-orange);}
+  #method .stop-num{background:var(--line-yellow); color:var(--navy);}
+  #results .stop-num{background:var(--line-green);}
+  #discussion .stop-num{background:var(--line-blue);}
+  #conclusion .stop-num{background:var(--line-grey); color:var(--navy);}
+
+  h2.stop-title{
+    font-family:var(--disp); font-weight:800; font-size:26px;
+    margin:0; letter-spacing:-0.01em;
+  }
+  .stop-sub{
+    font-family:var(--mono); font-size:11.5px; text-transform:uppercase;
+    letter-spacing:0.1em; color:var(--muted); margin-top:3px;
+  }
+
+  h3.sub{
+    font-family:var(--disp); font-weight:700; font-size:15.5px;
+    margin:30px 0 10px;
+  }
+
+  p{ font-size:15.5px; line-height:1.75; color:#252b32; margin:0 0 16px; max-width:78ch; }
+  ul,ol{ font-size:15.5px; line-height:1.7; color:#252b32; max-width:78ch; padding-left:22px; margin:0 0 16px;}
+  li{ margin-bottom:8px; }
+
+  code{
+    font-family:var(--mono); font-size:12.5px;
+    background:#efe9d8; padding:2px 6px; border-radius:4px;
+    color:#5a3a1e;
+  }
+
+  /* ===== Cards / grids ===== */
+  .card-row{ display:flex; gap:16px; flex-wrap:wrap; margin:20px 0 28px; }
+  .card{
+    flex:1; min-width:150px;
+    background:var(--card); border:1px solid var(--rule); border-radius:10px;
+    padding:18px 20px;
+  }
+  .card .k{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); }
+  .card .v{ font-family:var(--disp); font-weight:800; font-size:26px; margin-top:6px; color:var(--navy); }
+
+  table{ width:100%; border-collapse:collapse; margin:14px 0 26px; font-size:13.5px; }
+  th,td{ border-bottom:1px solid var(--rule); padding:10px 12px; text-align:left; }
+  th{
+    font-family:var(--disp); font-weight:700; font-size:11px;
+    text-transform:uppercase; letter-spacing:0.06em; color:var(--muted);
+  }
+  tr td:nth-child(2){ font-family:var(--mono); }
+  .pos{ color:var(--line-green); font-weight:700; }
+  .neg{ color:var(--line-red); font-weight:700; }
+
+  .caption{ font-size:12.5px; color:var(--muted); font-style:italic; margin:-10px 0 24px; }
+
+  /* architecture strip */
+  .arch{
+    display:flex; align-items:center; flex-wrap:wrap; gap:8px;
+    margin:22px 0 8px; font-family:var(--mono); font-size:12px;
+  }
+  .arch .l{
+    background:var(--navy); color:#fff;
+    border-radius:8px; padding:12px 16px; text-align:center; min-width:74px;
+  }
+  .arch .l .n{ display:block; font-weight:800; font-size:15px; color:var(--line-yellow); }
+  .arch .arrow{ color:var(--muted); }
+
+  /* results — digital display */
+  .board{
+    background:var(--navy); border-radius:12px;
+    padding:28px 30px; margin:22px 0 30px;
+    display:flex; gap:34px; flex-wrap:wrap;
+    border:1px solid #050d16;
+  }
+  .board .metric{ flex:1; min-width:140px; }
+  .board .metric .label{
+    font-family:var(--mono); font-size:11px; text-transform:uppercase;
+    letter-spacing:0.1em; color:#9fb0bf; margin-bottom:6px;
+  }
+  .board .metric .num{
+    font-family:var(--mono); font-weight:700; font-size:32px; color:var(--line-yellow);
+    letter-spacing:0.02em;
+  }
+
+  blockquote{
+    margin:20px 0; padding:14px 20px;
+    border-left:4px solid var(--line-blue);
+    background:var(--card); font-size:14.5px; color:var(--muted); font-style:italic;
+    max-width:74ch;
+  }
+
+  /* ===== Footer ===== */
+  footer{
+    background:var(--navy); color:#9fb0bf; margin-top:40px;
+    padding:36px 24px 30px;
+  }
+  .footer-inner{
+    max-width:1120px; margin:0 auto;
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:14px;
+    font-family:var(--mono); font-size:12px;
+  }
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  .legend .sw{
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .legend .sw i{
+    width:10px; height:10px; border-radius:50%; display:inline-block;
+  }
+
+  @media (max-width:640px){
+    .hero{ padding:56px 18px 34px; }
+    section.stop-section{ padding:46px 0 6px; }
+    .board{ padding:22px 18px; gap:22px; }
+  }
+
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="bullet">P</span> Fare Prediction Line</div>
+      <nav class="stops">
+        <a href="#data">Data</a>
+        <a href="#eda">EDA</a>
+        <a href="#method">Method</a>
+        <a href="#results">Results</a>
+        <a href="#discussion">Discussion</a>
+        <a href="#conclusion">Conclusion</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-inner">
+      <div class="eyebrow">Applied ML &middot; Working Paper</div>
+      <h1 class="headline">Predicting Airbnb <em>fares</em> across New York City</h1>
+      <p class="hero-sub">
+        A feed-forward neural network trained on 30,259 NYC listings to predict nightly
+        price from structure, location, and host signals — from a 90-column raw scrape
+        down to a working regressor, documented stop by stop.
+      </p>
+      <div class="hero-meta">
+        <div><b>30,259</b>listings</div>
+        <div><b>90 → 24</b>features kept</div>
+        <div><b>91</b>model inputs</div>
+        <div><b>R² 0.55</b>test performance</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="route">
+    <div class="route-inner">
+      <div class="route-line"></div>
+      <a class="stop" href="#data"><span class="dot">1</span><span class="label">Dataset</span></a>
+      <a class="stop" href="#eda"><span class="dot">2</span><span class="label">Exploration</span></a>
+      <a class="stop" href="#method"><span class="dot">3</span><span class="label">Method</span></a>
+      <a class="stop" href="#results"><span class="dot">4</span><span class="label">Results</span></a>
+      <a class="stop" href="#discussion"><span class="dot">5</span><span class="label">Discussion</span></a>
+      <a class="stop" href="#conclusion"><span class="dot">6</span><span class="label">Conclusion</span></a>
+    </div>
+  </div>
+
+  <main>
+
+    <section class="stop-section" id="data">
+      <div class="stop-head">
+        <div class="stop-num">1</div>
+        <div>
+          <h2 class="stop-title">The Dataset</h2>
+          <div class="stop-sub">Raw scrape → cleaned feature set</div>
+        </div>
+      </div>
+
+      <p>
+        The raw dataset contains <b>30,259 listings</b> across <b>90 columns</b>, scraped
+        directly from live Airbnb listing pages (each row carries a <code>listing_url</code>
+        and <code>scrape_id</code>), in the style of the well-known Inside Airbnb public
+        data releases. It spans host metadata, property characteristics, coordinates,
+        pricing, availability calendars, and review scores.
+      </p>
+
+      <div class="card-row">
+        <div class="card"><div class="k">Raw columns</div><div class="v">90</div></div>
+        <div class="card"><div class="k">Kept after pruning</div><div class="v">24</div></div>
+        <div class="card"><div class="k">After encoding</div><div class="v">92</div></div>
+        <div class="card"><div class="k">Listings</div><div class="v">30,259</div></div>
+      </div>
+
+      <h3 class="sub">Three passes of feature pruning</h3>
+      <p>
+        <b>Pass one</b> removed identifiers, scrape metadata, and redundant host-listing-count
+        aggregates (90 → 54 columns). <b>Pass two</b> dropped host fields with high
+        missingness or weak signal — <code>host_about</code>, <code>host_response_time</code>,
+        <code>host_acceptance_rate</code> — plus post-hoc review-timing fields (54 → 34).
+        <b>Pass three</b> removed free text and duplicate geography: <code>name</code>,
+        <code>description</code>, <code>picture_url</code>, and a redundant
+        <code>neighbourhood</code> column that was 100% null. What remained was
+        <b>24 structural features</b>: location, room and property type, capacity,
+        stay-length rules, host trust signals, and review scores.
+      </p>
+
+      <h3 class="sub">Encoding &amp; engineering</h3>
+      <ul>
+        <li><b>property_type</b> (49 categories, from "Entire rental unit" to "Boat" and "Cave") and <b>room_type</b> (4 categories) were one-hot encoded.</li>
+        <li><b>host_identity_verified</b> and <b>has_availability</b> were label encoded as binary/ternary flags.</li>
+        <li><b>amenities</b>, stored as a JSON list per listing, was parsed and collapsed into a single <code>amenities_count</code> integer, then dropped in raw form.</li>
+        <li><b>price</b> was stripped of currency symbols and thousands separators, then coerced to numeric.</li>
+        <li>Remaining numeric gaps (bathrooms, bedrooms, beds — each missing for roughly a third of rows) were filled with the column median; categorical gaps with the column mode.</li>
+      </ul>
+    </section>
+
+    <section class="stop-section" id="eda">
+      <div class="stop-head">
+        <div class="stop-num">2</div>
+        <div>
+          <h2 class="stop-title">Exploratory Analysis</h2>
+          <div class="stop-sub">Skew, correlation, and what actually moves price</div>
+        </div>
+      </div>
+
+      <p>
+        Raw nightly price is heavily right-skewed — a mean near <b>$248</b> against a
+        standard deviation of <b>$451</b> — driven by a long tail of luxury listings.
+        Because squared-error losses are sensitive to that tail, a <code>log1p</code>
+        transform was applied before modelling, producing a far more symmetric target
+        and a more stable training signal.
+      </p>
+
+      <h3 class="sub">What correlates with price</h3>
+      <table>
+        <tr><th>Feature</th><th>Correlation</th><th>Direction</th></tr>
+        <tr><td>accommodates</td><td>0.479</td><td><span class="pos">▲ positive</span></td></tr>
+        <tr><td>beds</td><td>0.370</td><td><span class="pos">▲ positive</span></td></tr>
+        <tr><td>bedrooms</td><td>0.325</td><td><span class="pos">▲ positive</span></td></tr>
+        <tr><td>room_type: Entire home/apt</td><td>0.302</td><td><span class="pos">▲ positive</span></td></tr>
+        <tr><td>longitude</td><td>&minus;0.249</td><td><span class="neg">▼ negative</span></td></tr>
+        <tr><td>minimum_nights</td><td>&minus;0.217</td><td><span class="neg">▼ negative</span></td></tr>
+        <tr><td>property_type: Private room in rental unit</td><td>&minus;0.320</td><td><span class="neg">▼ negative</span></td></tr>
+        <tr><td>room_type: Private room</td><td>&minus;0.336</td><td><span class="neg">▼ negative</span></td></tr>
+      </table>
+      <p class="caption">Pearson correlation with log(price), computed across all 30,259 listings.</p>
+
+      <p>
+        The pattern reads cleanly: price scales with how much space and how many guests a
+        listing holds, and falls sharply for private rooms in someone else's home. The
+        negative pull of longitude reflects NYC's geography — moving east, away from
+        Manhattan's core, tracks with lower average price.
+      </p>
+    </section>
+
+    <section class="stop-section" id="method">
+      <div class="stop-head">
+        <div class="stop-num">3</div>
+        <div>
+          <h2 class="stop-title">Method</h2>
+          <div class="stop-sub">Splits, architecture, training</div>
+        </div>
+      </div>
+
+      <p>
+        The 91-column feature matrix and log-price target were split 80% train, with the
+        remainder split again into test and validation (≈80 / 16 / 4 overall), using a
+        fixed seed for reproducibility. Features were standardized with a scaler fit only
+        on the training partition.
+      </p>
+
+      <h3 class="sub">Network architecture</h3>
+      <div class="arch">
+        <div class="l">Input<span class="n">91</span></div>
+        <span class="arrow">→</span>
+        <div class="l">Linear+ReLU<span class="n">64</span></div>
+        <span class="arrow">→</span>
+        <div class="l">Linear+ReLU<span class="n">32</span></div>
+        <span class="arrow">→</span>
+        <div class="l">Linear+ReLU<span class="n">16</span></div>
+        <span class="arrow">→</span>
+        <div class="l">Output<span class="n">1</span></div>
+      </div>
+      <p class="caption">91 → 64 → 32 → 16 → 1, ReLU between hidden layers. 8,513 trainable parameters.</p>
+
+      <ul>
+        <li><b>Loss:</b> Mean Squared Error</li>
+        <li><b>Optimizer:</b> Adam, lr = 0.001</li>
+        <li><b>Batch size:</b> 8, shuffled across all loaders</li>
+        <li><b>Epochs:</b> 10</li>
+        <li><b>Target:</b> trained on log1p(price), inverted with expm1 for dollar interpretation</li>
+      </ul>
+
+      <p>
+        Training loss fell from 0.796 to 0.218 over 10 epochs. Validation loss tracked
+        closely, bottoming out at 0.188 around epoch 7 before drifting slightly upward —
+        a mild early signal of overfitting, though the train/validation gap stayed small
+        throughout.
+      </p>
+    </section>
+
+    <section class="stop-section" id="results">
+      <div class="stop-head">
+        <div class="stop-num">4</div>
+        <div>
+          <h2 class="stop-title">Results</h2>
+          <div class="stop-sub">Held-out test performance</div>
+        </div>
+      </div>
+
+      <div class="board">
+        <div class="metric"><div class="label">MAE (log-price)</div><div class="num">0.350</div></div>
+        <div class="metric"><div class="label">RMSE (log-price)</div><div class="num">0.473</div></div>
+        <div class="metric"><div class="label">R²</div><div class="num">0.549</div></div>
+      </div>
+
+      <p>
+        An R² of 0.55 means the model explains just over half the variance in log-price
+        using structural and locational features alone, with no text, image, or
+        review-text signal included. On a single held-out listing used as a spot check,
+        the model predicted <b>₹188.72</b> against an actual price of <b>₹126.87</b> —
+        a useful reminder that aggregate metrics can look reasonable while individual
+        predictions still carry real error.
+      </p>
+    </section>
+
+    <section class="stop-section" id="discussion">
+      <div class="stop-head">
+        <div class="stop-num">5</div>
+        <div>
+          <h2 class="stop-title">Discussion</h2>
+          <div class="stop-sub">Why it plateaus where it does</div>
+        </div>
+      </div>
+
+      <p>
+        Capacity and room configuration carry most of the learnable signal in a purely
+        structural feature set, and performance under this feature set appears to plateau
+        near R² ≈ 0.55. That's broadly consistent with other analyses of Inside-Airbnb-style
+        data: structural features alone tend to leave real variance unexplained, with the
+        rest tied up in things this dataset doesn't capture structurally — photo quality,
+        reputation built into review text rather than numeric scores, seasonal demand, and
+        competition among nearby listings.
+      </p>
+
+      <blockquote>
+        The mild uptick in validation loss after epoch 7 suggests the network already has
+        more capacity than 24 core structural features need — further gains are more
+        likely to come from new feature sources than from a bigger model.
+      </blockquote>
+
+      <h3 class="sub">Limitations</h3>
+      <ul>
+        <li>All free text — listing name, description, host bio — was dropped early, despite plausibly carrying price signal.</li>
+        <li>Median/mode imputation was applied uniformly, even though bathrooms, bedrooms, and beds were each missing for roughly a third of listings.</li>
+        <li>A single fixed split and a fixed 10-epoch run were used — no k-fold cross-validation or learning-rate scheduling.</li>
+        <li>One-hot encoded <code>property_type</code> includes many rare categories ("Cave", "Boat", "Floor") the model can only weight unreliably.</li>
+      </ul>
+    </section>
+
+    <section class="stop-section" id="conclusion">
+      <div class="stop-head">
+        <div class="stop-num">6</div>
+        <div>
+          <h2 class="stop-title">Conclusion</h2>
+          <div class="stop-sub">End of the line</div>
+        </div>
+      </div>
+
+      <p>
+        This project traced a full pipeline for NYC Airbnb price prediction: disciplined
+        reduction of a 90-column raw scrape to 24 meaningful features, careful categorical
+        encoding and skew correction, and a compact feed-forward network trained to an R²
+        of 0.55 on unseen data. A large share of price variance is explainable from basic
+        capacity, room type, and location alone — and the remainder is a clear invitation
+        for future work: TF–IDF or embedding features from listing text, neighbourhood-level
+        aggregate price features, and a head-to-head comparison against gradient-boosted
+        trees (XGBoost, LightGBM), which are often competitive or better on tabular data
+        like this.
+      </p>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <div>Fare Prediction Line — working paper, NYC Airbnb dataset</div>
+      <div class="legend">
+        <span class="sw"><i style="background:var(--line-red)"></i>Dataset</span>
+        <span class="sw"><i style="background:var(--line-orange)"></i>EDA</span>
+        <span class="sw"><i style="background:var(--line-yellow)"></i>Method</span>
+        <span class="sw"><i style="background:var(--line-green)"></i>Results</span>
+        <span class="sw"><i style="background:var(--line-blue)"></i>Discussion</span>
+        <span class="sw"><i style="background:var(--line-grey)"></i>Conclusion</span>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
+
+
